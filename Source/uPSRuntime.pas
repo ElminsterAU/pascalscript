@@ -4603,8 +4603,13 @@ begin
               {$ELSE}
               AssignIDispatchFromVariant(IDispatch(Dest^), Variant(Src^));
               {$ENDIF}
-            end else
+            end else begin
+              {$IFDEF Delphi3UP}
+              Result := Supports(IUnknown(TVarData(Src^).VUnknown), TPSTypeRec_Interface(desttype).Guid, IUnknown(Dest^));
+              {$ELSE}
               Result := False;
+              {$ENDIF}
+            end;
 {$IFDEF Delphi3UP}
           end else
           if srctype.BaseType = btClass then
