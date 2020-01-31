@@ -12,7 +12,7 @@ unit ParserU;
 {version: 20041219}
 
 interface
-  uses uPSUtils, SysUtils, StrUtils, ParserUtils, BigIni, Classes;
+  uses uPSUtils, SysUtils, StrUtils, ParserUtils, {BigIni,} Classes, IniFiles;
 
 type
   TProcAttr = set of (PublicProc, IsDone, IsHelper);
@@ -59,7 +59,7 @@ type
     fParser: TPsPascalParser;
     fToken, fPrevToken: TPasToken;
 //    fprevOrgToken: string;
-    Ini: TBigIniFile;
+    Ini: TMemIniFile;
     FRenamingHelper: Integer;
   private
     LastTokens: array of TPasToken;
@@ -131,7 +131,7 @@ type
     procedure ParseClassDef(const aClassName: string);
     // helper method which parses a routine decl (after the procedure name)
     function ParseProcDecl(var ProcName, decl, CallingConvention: string;
-      Options: TProcDeclOptions; OwnerClass:String=''): TProcDeclInfo;
+      aOptions: TProcDeclOptions; OwnerClass:String=''): TProcDeclInfo;
   public
     constructor Create(const IniFilename: string; aTokenHistoryLength: Integer = 5);
     destructor Destroy; override;
@@ -206,12 +206,13 @@ begin
   FCompileTimeFunctions := false;
   Writeln := nil;
   Readln := nil;
-  Ini := TBigIniFile.Create(IniFilename);
+  Ini := TMemIniFile.Create(IniFilename);
+  {
   Ini.FlagDropApostrophes := True;
   ini.FlagDropCommentLines := True;
   Ini.FlagTrimRight := True;
   Ini.FlagFilterOutInvalid := True;
-
+  }
   fParser := TPSPascalParser.create;
   TokenHistoryLength := aTokenHistoryLength;
   if TokenHistoryLength > 0 then
@@ -1310,7 +1311,7 @@ begin
 end; {ParseVariables}
 
 function TUnitParser.ParseProcDecl(var ProcName, decl, CallingConvention: string;
-  Options: TProcDeclOptions; OwnerClass:String=''): TProcDeclInfo;
+  aOptions: TProcDeclOptions; OwnerClass:String=''): TProcDeclInfo;
 var
   VarListFirst: boolean;
   FinishedProcDecl: boolean;
@@ -1331,14 +1332,14 @@ begin
     decl := 'Procedure '
   else if IfMatch(CSTII_Constructor) then
   begin
-    if not (IsMethod in Options) then
+    if not (IsMethod in aOptions) then
       RaiseError('Constructor directive only applies to methods: '+OwnerClass, TokenRow, TokenCol);
     Include(Result, IsConstructor);
     decl := 'Constructor '
   end
   else if IfMatch(CSTII_Destructor) then
   begin
-    if not (IsMethod in Options) then
+    if not (IsMethod in aOptions) then
       RaiseError('Destructor directive only applies to methods: '+OwnerClass, TokenRow, TokenCol);
     Include(Result, IsDestructor);
     decl := 'Destructor '
@@ -1346,7 +1347,7 @@ begin
   else
     Match(CSTII_Procedure, 'Function'' Or ''Procedure');
 
-  if not (Ispointer in Options) then
+  if not (Ispointer in aOptions) then
   begin
     Match(CSTI_Identifier);
     ProcName := PrevOrgToken;
@@ -1428,7 +1429,7 @@ begin
     CallingConvention := 'cdRegister';
     FinishedProcDecl := false;
 // check if we are a method pointer
-    if IsPointer in Options then
+    if IsPointer in aOptions then
     begin
       if Ifmatch(CSTII_of) then
       begin
@@ -1446,31 +1447,31 @@ begin
       case TokenID of
         CSTII_External:
           begin
-            if (IsPointer in Options) or
-              (IsMethod in Options) then
+            if (IsPointer in aOptions) or
+              (IsMethod in aOptions) then
               RaiseError('External directive only applies to routines ('+OwnerClass + ProcName + ')', TokenRow, TokenCol);
             NextToken;
             Match(CSTI_Semicolon);
           end;
         CSTII_Export:
           begin
-            if (IsPointer in Options) or
-              (IsMethod in Options) then
+            if (IsPointer in aOptions) or
+              (IsMethod in aOptions) then
               RaiseError('Export directive only applies to routines (' + OwnerClass +ProcName + ')', TokenRow, TokenCol);
             NextToken;
             Match(CSTI_Semicolon);
           end;
         CSTII_Forward:
           begin
-            if (IsPointer in Options) or
-              (IsMethod in Options) then
+            if (IsPointer in aOptions) or
+              (IsMethod in aOptions) then
               RaiseError('Forward directive only applies to routines (' + OwnerClass +ProcName + ')', TokenRow, TokenCol);
             NextToken;
             Match(CSTI_Semicolon);
           end;
         CSTII_Override:
           begin
-            if not (IsMethod in Options) then
+            if not (IsMethod in aOptions) then
               RaiseError('Override directive only applies to methods (' + OwnerClass +ProcName + ')', TokenRow, TokenCol);
             decl := '';
             NextToken;
@@ -1478,7 +1479,7 @@ begin
           end;
         CSTII_Virtual:
           begin
-            if not (IsMethod in Options) then
+            if not (IsMethod in aOptions) then
               RaiseError('Virtual directive only applies to methods (' + OwnerClass +ProcName + ')', TokenRow, TokenCol);
             NextToken;
             Match(CSTI_Semicolon);
@@ -1495,7 +1496,7 @@ begin
     // check for calling conversion
             if Token = 'MESSAGE' then
             begin
-              if not (IsMethod in Options) then
+              if not (IsMethod in aOptions) then
                 RaiseError('Override directive only applies to methods (' + OwnerClass +ProcName + ')', TokenRow, TokenCol);
               NextToken;
               Match(CSTI_Identifier);
@@ -1503,7 +1504,7 @@ begin
             end else
               if Token = 'DYNAMIC' then
               begin
-                if not (IsMethod in Options) then
+                if not (IsMethod in aOptions) then
                   RaiseError('Method directive only applies to methods (' + OwnerClass + ProcName + ')', TokenRow, TokenCol);
                 NextToken;
                 Match(CSTI_Semicolon);
@@ -1538,11 +1539,11 @@ begin
                 NextToken;
                 Match(CSTI_Semicolon);
 
-              end else if not (Ispointer in Options) then
+              end else if not (Ispointer in aOptions) then
               begin
                 if (token = 'OVERLOAD') then
                 begin
-//                  if (IsPointer in Options) then
+//                  if (IsPointer in aOptions) then
 //                    RaiseError('overload directive does not applies to function/method pointers', TokenRow, TokenCol);
                   Writeln('Overloading isnt supported. Remapping of name required '+OwnerClass +Decl);
                   OldProcName := ProcName;
@@ -1562,7 +1563,7 @@ begin
                     // create a tmp procedure to handle the overload.
                     decl2 := decl;
 
-                    If (IsMethod in Options) then
+                    If (IsMethod in aOptions) then
                       if (Pos('(',decl)=0)then
                         decl2 := StringReplace(decl, OldProcName, OldProcName+'(Self: '+Ownerclass+')', [rfIgnoreCase])
                       else
@@ -1606,7 +1607,7 @@ begin
                     If (IsConstructor in Result) then
                       Add('Begin Result := '+OwnerClass+'.' + OldProcName+ParamStr+'; END;')
                     else
-                    If (IsMethod in Options) then
+                    If (IsMethod in aOptions) then
                       Add('Begin '+S+'Self.' + OldProcName+ParamStr+'; END;')
                     else
                       Add('Begin '+s+UnitName + '.' + OldProcName +ParamStr+ '; END;');
